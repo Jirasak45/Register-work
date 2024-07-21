@@ -36,24 +36,17 @@ export default function RegistrationForm() {
     address: '',
     contactNumber: '',
     file: null,
+    email: '',
   });
   const [filename, setFilename] = useState('');
   const [isUploaded, setIsUploaded] = useState(false);
   const [errors, setErrors] = useState({});
 
-  // Handle input changes
   const handleChange = (event) => {
     const { name, value } = event.target;
-    setFormValues({
-      ...formValues,
-      [name]: value,
-    });
-    setErrors({
-      ...errors,
-      [name]: ''
-    });
+    setFormValues({ ...formValues, [name]: value });
   };
-
+  
   // Handle date changes
   const handleDateChange = (date) => {
     setFormValues({
@@ -186,16 +179,18 @@ export default function RegistrationForm() {
                   format="DD/MM/YYYY"
                   value={formValues.birthDate}
                   onChange={handleDateChange}
-                  renderInput={(params) => (
-                    <TextField
-                      {...params}
-                      fullWidth
-                      required
-                      error={Boolean(errors.birthDate)}
-                      helperText={errors.birthDate}
-                      sx={{ borderColor: errors.birthDate ? 'red' : 'inherit' }}
-                    />
-                  )}
+                  slots={{
+                    textField: (params) => (
+                      <TextField
+                        {...params}
+                        fullWidth
+                        required
+                        error={Boolean(errors.birthDate)}
+                        helperText={errors.birthDate}
+                        sx={{ borderColor: errors.birthDate ? 'red' : 'inherit' }}
+                      />
+                    ),
+                  }}
                 />
               </LocalizationProvider>
             </Grid>
@@ -227,6 +222,21 @@ export default function RegistrationForm() {
                 error={Boolean(errors.address)}
                 helperText={errors.address}
                 sx={{ borderColor: errors.address ? 'red' : 'inherit' }}
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                id="email"
+                name="email"
+                label="Email"
+                variant="outlined"
+                value={formValues.email}
+                onChange={handleChange}
+                required
+                error={Boolean(errors.email)}
+                helperText={errors.email}
+                sx={{ borderColor: errors.email ? 'red' : 'inherit' }}
               />
             </Grid>
             <Grid item xs={12}>
