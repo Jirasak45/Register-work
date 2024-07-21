@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { TextField, Button, MenuItem, Typography, Box, Grid } from '@mui/material';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
@@ -7,14 +7,12 @@ import { styled } from '@mui/material/styles';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import axios from 'axios';
 
-// Define the positions for the dropdown menu
 const positions = [
   { value: 'Front-end Trainee', label: 'Front-end Trainee' },
   { value: 'HR Trainee', label: 'HR Trainee' },
   { value: 'Application Tester Trainee', label: 'Application Tester Trainee' }
 ];
 
-// Style the hidden file input
 const VisuallyHiddenInput = styled('input')({
   clip: 'rect(0 0 0 0)',
   clipPath: 'inset(50%)',
@@ -38,96 +36,106 @@ export default function RegistrationForm() {
     file: null,
     email: '',
   });
-  const [filename, setFilename] = useState('');
-  const [isUploaded, setIsUploaded] = useState(false);
+  const [touched, setTouched] = useState({});
   const [errors, setErrors] = useState({});
+
+  const validateField = useCallback((name, value) => {
+    switch (name) {
+      case 'name':
+        return !value ? 'จำเป็นต้องใส่ชื่อ' : !/^\D*$/.test(value) ? 'ชื่อต้องประกอบด้วยตัวอักษรเท่านั้น' : '';
+      case 'position':
+        return !value ? 'กรุณาเลือกตำแหน่ง' : '';
+      case 'birthDate':
+        return !value ? 'กรุณาระบุวันเดือนปีเกิด' : value > new Date() ? 'วันเกิดต้องไม่เกินวันปัจจุบัน' : '';
+      case 'gpa':
+        return !value ? 'จำเป็นต้องใส่เกรดเฉลี่ย' : (isNaN(value) || value < 0 || value > 4) ? 'เกรดเฉลี่ยต้องอยู่ระหว่าง 0 ถึง 4' : '';
+      case 'address':
+        return !value ? 'จำเป็นต้องใส่ที่อยู่' : '';
+      case 'email':
+        return !value ? 'จำเป็นต้องใส่อีเมล' : !/\S+@\S+\.\S+/.test(value) ? 'รูปแบบอีเมลไม่ถูกต้อง' : '';
+      case 'contactNumber':
+        return !value ? 'จำเป็นต้องใส่หมายเลขเบอร์โทรศัพท์' : !/^[0-9]{10}$/.test(value) ? 'หมายเลขเบอร์โทรศัพท์ต้องประกอบด้วยตัวเลข 10 หลัก' : '';
+      case 'file':
+        return !value ? 'กรุณาแนบไฟล์ประวัติส่วนตัว' : '';
+      default:
+        return '';
+    }
+  }, []);
 
   const handleChange = (event) => {
     const { name, value } = event.target;
-    setFormValues({ ...formValues, [name]: value });
-  };
-  
-  // Handle date changes
-  const handleDateChange = (date) => {
-    setFormValues({
-      ...formValues,
-      birthDate: date,
-    });
-    setErrors({
-      ...errors,
-      birthDate: ''
-    });
+    setFormValues(prev => ({ ...prev, [name]: value }));
+    if (touched[name]) {
+      setErrors(prev => ({ ...prev, [name]: validateField(name, value) }));
+    }
   };
 
-  // Handle file changes
+  const handleBlur = (event) => {
+    const { name, value } = event.target;
+    setTouched(prev => ({ ...prev, [name]: true }));
+    setErrors(prev => ({ ...prev, [name]: validateField(name, value) }));
+  };
+
+  const handleDateChange = (date) => {
+    setFormValues(prev => ({ ...prev, birthDate: date }));
+    if (touched.birthDate) {
+      setErrors(prev => ({ ...prev, birthDate: validateField('birthDate', date) }));
+    }
+  };
+
+  const handleDateBlur = () => {
+    setTouched(prev => ({ ...prev, birthDate: true }));
+    setErrors(prev => ({ ...prev, birthDate: validateField('birthDate', formValues.birthDate) }));
+  };
+
   const handleFileChange = (event) => {
     const file = event.target.files[0];
-    if (file) {
-      setFilename(file.name);
-      setIsUploaded(true);
-      setFormValues({
-        ...formValues,
-        file: event.target.files[0],
-      });
-      setErrors({
-        ...errors,
-        file: ''
-      });
-    }
+    setFormValues(prev => ({ ...prev, file: file }));
+    setTouched(prev => ({ ...prev, file: true }));
+    setErrors(prev => ({ ...prev, file: validateField('file', file) }));
   };
 
-  // Handle form submission
   const handleSubmit = async (event) => {
     event.preventDefault();
+    
+    // Touch all fields
+    const allTouched = Object.keys(formValues).reduce((acc, key) => ({ ...acc, [key]: true }), {});
+    setTouched(allTouched);
 
-    const newErrors = {};
-    if (!formValues.name) newErrors.name = 'Name is required';
-    if (!formValues.position) newErrors.position = 'Position is required';
-    if (!formValues.birthDate) newErrors.birthDate = 'Birth date is required';
-    if (!formValues.gpa) newErrors.gpa = 'GPA is required';
-    if (!formValues.address) newErrors.address = 'Address is required';
-    if (!formValues.contactNumber) newErrors.contactNumber = 'Contact number is required';
-    if (!formValues.file) newErrors.file = 'File is required';
+    // Validate all fields
+    const formErrors = Object.keys(formValues).reduce((acc, key) => ({
+      ...acc,
+      [key]: validateField(key, formValues[key])
+    }), {});
+    setErrors(formErrors);
 
-    if (Object.keys(newErrors).length > 0) {
-      setErrors(newErrors);
-      return;
-    }
+    // Check if the form is valid
+    const isValid = Object.values(formErrors).every(x => x === '');
+    
+    if (isValid) {
+      try {
+        const formData = new FormData();
+        Object.keys(formValues).forEach(key => {
+          formData.append(key, formValues[key]);
+        });
 
-    const formData = new FormData();
-    for (const key in formValues) {
-      formData.append(key, formValues[key]);
-    }
+        const response = await axios.post('http://localhost:5000/submit', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
 
-    try {
-      const response = await axios.post('http://localhost:5000/submit', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
-
-      if (response.status === 200) {
-        alert('Form Submission Successful');
-        setErrors({});
-      } else {
-        alert('Form submission failed');
+        if (response.status === 200) {
+          alert('Form Submission Successful');
+        } else {
+          alert('Form submission failed');
+        }
+      } catch (error) {
+        alert('Form submission error: ' + error.message);
       }
-    } catch (error) {
-      alert('Form submission error: ' + error.message);
     }
   };
 
   return (
-    <Box
-      sx={{
-        height: '100vh',
-        width: '100vw',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        p: 2,
-      }}
-    >
+    <Box sx={{ height: '100vh', width: '100vw', display: 'flex', alignItems: 'center', justifyContent: 'center', p: 2 }}>
       <Box sx={{ width: '100%', maxWidth: 800 }}>
         <Typography variant="h4" component="h1" gutterBottom style={{ textAlign: 'center' }}>
           แบบฟอร์มสำหรับสมัครฝึกงานและแนบไฟล์ประวัติ
@@ -144,10 +152,9 @@ export default function RegistrationForm() {
                 variant="outlined"
                 value={formValues.name}
                 onChange={handleChange}
-                required
-                error={Boolean(errors.name)}
-                helperText={errors.name}
-                sx={{ borderColor: errors.name ? 'red' : 'inherit' }}
+                onBlur={handleBlur}
+                error={touched.name && Boolean(errors.name)}
+                helperText={touched.name && errors.name}
               />
             </Grid>
             <Grid item xs={12}>
@@ -160,10 +167,9 @@ export default function RegistrationForm() {
                 variant="outlined"
                 value={formValues.position}
                 onChange={handleChange}
-                required
-                error={Boolean(errors.position)}
-                helperText={errors.position}
-                sx={{ borderColor: errors.position ? 'red' : 'inherit' }}
+                onBlur={handleBlur}
+                error={touched.position && Boolean(errors.position)}
+                helperText={touched.position && errors.position}
               >
                 {positions.map((option) => (
                   <MenuItem key={option.value} value={option.value}>
@@ -179,17 +185,13 @@ export default function RegistrationForm() {
                   format="DD/MM/YYYY"
                   value={formValues.birthDate}
                   onChange={handleDateChange}
-                  slots={{
-                    textField: (params) => (
-                      <TextField
-                        {...params}
-                        fullWidth
-                        required
-                        error={Boolean(errors.birthDate)}
-                        helperText={errors.birthDate}
-                        sx={{ borderColor: errors.birthDate ? 'red' : 'inherit' }}
-                      />
-                    ),
+                  onClose={handleDateBlur}
+                  slotProps={{
+                    textField: {
+                      fullWidth: true,
+                      error: touched.birthDate && Boolean(errors.birthDate),
+                      helperText: touched.birthDate && errors.birthDate,
+                    },
                   }}
                 />
               </LocalizationProvider>
@@ -203,10 +205,9 @@ export default function RegistrationForm() {
                 variant="outlined"
                 value={formValues.gpa}
                 onChange={handleChange}
-                required
-                error={Boolean(errors.gpa)}
-                helperText={errors.gpa}
-                sx={{ borderColor: errors.gpa ? 'red' : 'inherit' }}
+                onBlur={handleBlur}
+                error={touched.gpa && Boolean(errors.gpa)}
+                helperText={touched.gpa && errors.gpa}
               />
             </Grid>
             <Grid item xs={12}>
@@ -218,10 +219,9 @@ export default function RegistrationForm() {
                 variant="outlined"
                 value={formValues.address}
                 onChange={handleChange}
-                required
-                error={Boolean(errors.address)}
-                helperText={errors.address}
-                sx={{ borderColor: errors.address ? 'red' : 'inherit' }}
+                onBlur={handleBlur}
+                error={touched.address && Boolean(errors.address)}
+                helperText={touched.address && errors.address}
               />
             </Grid>
             <Grid item xs={12}>
@@ -233,10 +233,9 @@ export default function RegistrationForm() {
                 variant="outlined"
                 value={formValues.email}
                 onChange={handleChange}
-                required
-                error={Boolean(errors.email)}
-                helperText={errors.email}
-                sx={{ borderColor: errors.email ? 'red' : 'inherit' }}
+                onBlur={handleBlur}
+                error={touched.email && Boolean(errors.email)}
+                helperText={touched.email && errors.email}
               />
             </Grid>
             <Grid item xs={12}>
@@ -248,47 +247,42 @@ export default function RegistrationForm() {
                 variant="outlined"
                 value={formValues.contactNumber}
                 onChange={handleChange}
-                required
-                error={Boolean(errors.contactNumber)}
-                helperText={errors.contactNumber}
-                sx={{ borderColor: errors.contactNumber ? 'red' : 'inherit' }}
+                onBlur={handleBlur}
+                error={touched.contactNumber && Boolean(errors.contactNumber)}
+                helperText={touched.contactNumber && errors.contactNumber}
               />
             </Grid>
             <Grid item xs={12}>
-              <Grid container alignItems="center">
-                <Grid item>
-                  <Button
-                    component="label"
-                    role={undefined}
-                    variant="contained"
-                    tabIndex={-1}
-                    startIcon={<CloudUploadIcon />}
-                    sx={{ display: 'flex', justifyContent: 'center' }}
-                  >
-                    แนบไฟล์ประวัติส่วนตัว
-                    <VisuallyHiddenInput
-                      type="file"
-                      onChange={handleFileChange}
-                      required
-                    />
-                  </Button>
-                </Grid>
-                {isUploaded && (
-                  <Grid item xs>
-                    <Typography variant="subtitle1" color="success.main" sx={{ ml: 2 }}>
-                      {filename}
-                    </Typography>
-                  </Grid>
-                )}
-              </Grid>
-              {errors.file && (
+              <Button
+                component="label"
+                variant="contained"
+                startIcon={<CloudUploadIcon />}
+              >
+                แนบไฟล์ประวัติส่วนตัว
+                <VisuallyHiddenInput
+                  type="file"
+                  onChange={handleFileChange}
+                />
+              </Button>
+              {formValues.file && (
+                <Typography variant="subtitle1" color="success.main" sx={{ ml: 2 }}>
+                  {formValues.file.name}
+                </Typography>
+              )}
+              {touched.file && errors.file && (
                 <Typography variant="body2" color="error" sx={{ mt: 1 }}>
                   {errors.file}
                 </Typography>
               )}
             </Grid>
             <Grid item xs={12}>
-              <Button type="submit" variant="contained" color="primary" fullWidth sx={{ mt: 2 }}>
+              <Button 
+                type="submit" 
+                variant="contained" 
+                color="primary" 
+                fullWidth 
+                sx={{ mt: 2 }}
+              >
                 Submit
               </Button>
             </Grid>
